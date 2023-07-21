@@ -1,135 +1,132 @@
-import React, { useEffect, useRef, useState } from 'react';
-import ApexCharts from 'apexcharts';
+import React, { useState, useEffect } from 'react';
+import ApexCharts from 'react-apexcharts';
+import { subDays, subMonths } from 'date-fns';
 
 const CandlestickChart = () => {
-  const chartRef = useRef(null);
-  const [chartData, setChartData] = useState([]);
-  const [annotationOptions, setAnnotationOptions] = useState([]);
+  const [data, setData] = useState([]);
+  const [apiData, setApiData] = useState([]);
+  const [period, setPeriod] = useState('1d'); // Default period is 1 day
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const apiKey = 'BIVV2WO1A01YPAJO';
+      const fromSymbol = 'USD'; // Símbolo para dólar
+      const toSymbol = 'BRL'; // Símbolo para real brasileiro
+      const apiUrl = `https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=${fromSymbol}&to_symbol=${toSymbol}&apikey=${apiKey}`;
+
+      // Realizar a requisição à API usando fetch()
+      const response = await fetch(apiUrl);
+      const responseData = await response.json();
+
+      if (responseData['Time Series FX (Daily)']) {
+        // Extrair os dados da resposta
+        const timeSeries = responseData['Time Series FX (Daily)'];
+
+        // Converter os dados para o formato adequado para o gráfico
+        const chartData = [];
+        for (let date in timeSeries) {
+          chartData.push({
+            x: new Date(date).toISOString(),
+            y: [
+              parseFloat(timeSeries[date]['1. open']),
+              parseFloat(timeSeries[date]['2. high']),
+              parseFloat(timeSeries[date]['3. low']),
+              parseFloat(timeSeries[date]['4. close']),
+            ],
+          });
+        }
+
+        // Ordenar os dados pela data crescente
+        chartData.sort((a, b) => new Date(a.x) - new Date(b.x));
+
+        setData(chartData);
+        setApiData(chartData);
+      } else {
+        // If no data found, handle it here (e.g., show an error message)
+        setData([]);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Erro ao obter dados da API Alpha Advantage:', error);
+      setData([]);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch(
-          'https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=USD&to_symbol=BRL&apikey=BIVV2WO1A01YPAJO'
-        );
-        const data = await response.json();
-        const dailyQuotes = data['Time Series FX (Daily)'];
-        if (dailyQuotes) {
-          const chartData = Object.keys(dailyQuotes).map(date => {
-            const quote = dailyQuotes[date];
-            return {
-              x: new Date(date),
-              y: [parseFloat(quote['1. open']), parseFloat(quote['2. high']), parseFloat(quote['3. low']), parseFloat(quote['4. close'])]
-            };
-          });
-          const lastMonthData = chartData.slice(0, 30);
-          setChartData(lastMonthData);
-
-          const highPrices = lastMonthData.map(data => data.y[1]);
-          const lowPrices = lastMonthData.map(data => data.y[2]);
-          const fibonacciAnnotations = calculateFibonacciRetracement(highPrices, lowPrices);
-          setAnnotationOptions(fibonacciAnnotations);
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      }
-    };
-
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (chartData.length > 0) {
-      const options = {
-        chart: {
-          type: 'candlestick',
-          height: 350,
-          events: {
-            rendered: addFibonacciAnnotations,
-          },
-        },
-        series: [
-          {
-            data: chartData,
-            type: 'candlestick',
-          },
-        ],
-        xaxis: {
-          type: 'datetime',
-        },
-        yaxis: {
-          tooltip: {
-            enabled: true,
-          },
-        },
-        annotations: {
-          yaxis: annotationOptions,
-        },
-      };
+  const handleButtonClick = (period) => {
+    setPeriod(period);
 
-      const chart = new ApexCharts(chartRef.current, options);
-      chart.render();
+    // Filtrar os dados existentes com base no período selecionado
+    const today = new Date();
+    let startDate;
+    switch (period) {
+      case 'all':
+        startDate = subMonths(today, 100)
+        break;
+      case '1m':
+        startDate = subMonths(today, 1);
+        break;
+      case '15d':
+        startDate = subDays(today, 15);
+        break;
+      case '1w':
+        startDate = subDays(today, 7);
+        break;
+      case '1d':
+      default:
+        startDate = subDays(today, 1);
+        break;
     }
-  }, [chartData, annotationOptions]);
 
-  const calculateFibonacciRetracement = (highPrices, lowPrices) => {
-    const priceDiff = Math.max(...highPrices) - Math.min(...lowPrices);
-    const fibonacciLevels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
-
-    const fibonacciAnnotations = fibonacciLevels.map(level => {
-      const fibValue = Math.max(...highPrices) - priceDiff * level;
-      return {
-        y: fibValue,
-        borderColor: 'transparent',
-        fillColor: 'rgba(255, 0, 0, 0.1)',
-        opacity: 0.5,
-      };
-    });
-
-    return fibonacciAnnotations;
+    // Filtrar os dados com base no intervalo de datas
+    const filteredData = apiData.filter((item) => new Date(item.x) >= startDate);
+    setData(filteredData);
   };
 
-  const addFibonacciAnnotations = () => {
-    try {
-      const chartElement = chartRef.current;
-      const canvasElement = chartElement.querySelector('.apexcharts-canvas');
-  
-      if (chartElement && canvasElement) {
-        let annotationsElement = chartElement.querySelector('.fibonacci-annotations');
-  
-        if (!annotationsElement) {
-          annotationsElement = document.createElement('div');
-          annotationsElement.classList.add('fibonacci-annotations');
-          canvasElement.appendChild(annotationsElement);
-        } else {
-          annotationsElement.innerHTML = '';
-        }
-  
-        const chart = ApexCharts.getChartById(chartElement.id);
-        const yScale = chart.w.globals.scaleY;
-        const height = yScale.calcHeight(yScale.min, yScale.max);
-  
-        const annotationOptions = chart.w.config.annotations.yaxis;
-        annotationOptions.forEach((annotation, index) => {
-          const rectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-          rectElement.setAttribute('x', '0');
-          rectElement.setAttribute('y', yScale.getPixelForValue(annotation.y).toString());
-          rectElement.setAttribute('width', chart.w.globals.svgWidth.toString());
-          rectElement.setAttribute('height', height.toString());
-          rectElement.setAttribute('fill', annotation.fillColor);
-          rectElement.setAttribute('opacity', annotation.opacity.toString());
-  
-          annotationsElement.appendChild(rectElement);
-        });
-      }
-    } catch (error) {
-      console.error('Error adding Fibonacci annotations:', error);
-    }
-  };
-  
-  
+  return (
+    <div style={{
+      height: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      alignItems: "center"
+    }}>
+      <div>
+        <button onClick={() => handleButtonClick('1m')}>1 mês</button>
+        <button onClick={() => handleButtonClick('15d')}>15 dias</button>
+        <button onClick={() => handleButtonClick('1w')}>1 semana</button>
+        <button onClick={() => handleButtonClick('1d')}>1 dia</button>
+        <button onClick={() => handleButtonClick('all')}>Todos os dias</button>
+      </div>
 
-  return <div id="candlestick-chart" ref={chartRef} />;
+      {loading ? (
+        <p>Carregando dados...</p>
+      ) : (
+        <ApexCharts
+          type="candlestick"
+          series={[
+            {
+              data: data,
+            },
+          ]}
+          options={{
+            xaxis: {
+              type: 'datetime',
+            },
+          }}
+          height={600}
+          width={900}
+        />
+      )}
+    </div>
+  );
 };
 
 export default CandlestickChart;
