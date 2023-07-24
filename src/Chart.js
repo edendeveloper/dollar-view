@@ -9,7 +9,7 @@ const CandlestickChart = () => {
   const [apiData, setApiData] = useState([]);
   const [period, setPeriod] = useState('1d'); // Default period is 1 day
   const [loading, setLoading] = useState(true);
-  const [showAnnotations, setShowAnnotations] = useState(true);
+  const [showAnnotations, setShowAnnotations] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -203,6 +203,7 @@ const CandlestickChart = () => {
       <div style={{
         display: "flex",
         flexDirection: "row",
+        marginBottom: "20px"
       }}>
         <button onClick={() => handleButtonClick('all')} className='btn'>100 dias</button>
         <button onClick={() => handleButtonClick('1m')} className='btn'>1 mês</button>
@@ -239,6 +240,30 @@ const CandlestickChart = () => {
             annotations: {
               yaxis: showAnnotations ? annotationObject : [], 
             },
+            chart: {
+              selection: {
+                enabled: true,
+                type: 'xy',
+                fill: {
+                  color: '#24292e',
+                  opacity: 0.1
+                },
+                stroke: {
+                  width: 1,
+                  dashArray: 3,
+                  color: '#24292e',
+                  opacity: 0.2
+                },
+                xaxis: {
+                  min: undefined,
+                  max: undefined
+                },
+                yaxis: {
+                  min: undefined,
+                  max: undefined
+                }
+              }
+            }
           }}
           height={600}
           width={900}
